@@ -1,0 +1,7 @@
+apiVersion: etcd.yunxue521.top/v1alpha1
+kind: EtcdCluster
+metadata:
+  name: etcdcluster-sample
+spec:
+  size: 2
+  image:
