@@ -3,5 +3,5 @@ kind: EtcdCluster
 metadata:
   name: etcdcluster-sample
 spec:
-  size: 2
-  image:
+  size: 3
+  image: cnych/etcd:v3.4.13

@@ -27,7 +27,7 @@ import (
 type EtcdClusterSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	Size  uint   `json:"size"`
+	Size  *int32 `json:"size"`
 	Image string `json:"image"`
 }
 
