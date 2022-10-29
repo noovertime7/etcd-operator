@@ -21,6 +21,7 @@ import (
 	appsV1 "k8s.io/api/apps/v1"
 	coreV1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -38,6 +39,8 @@ type EtcdClusterReconciler struct {
 //+kubebuilder:rbac:groups=etcd.yunxue521.top,resources=etcdclusters,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=etcd.yunxue521.top,resources=etcdclusters/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=etcd.yunxue521.top,resources=etcdclusters/finalizers,verbs=update
+//+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -53,7 +56,7 @@ func (r *EtcdClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	//获取实例
 	var etcdCluster etcdv1alpha1.EtcdCluster
-	if err := r.Client.Get(ctx, req.NamespacedName, &etcdCluster); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, &etcdCluster); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	//创建或者更新对应的statefulSet以及Headless Svc 对象
@@ -61,30 +64,33 @@ func (r *EtcdClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	var svc coreV1.Service
 	svc.Name = etcdCluster.Name
 	svc.Namespace = etcdCluster.Namespace
-
-	op, err := ctrl.CreateOrUpdate(ctx, r.Client, &svc, func() error {
-		// 调谐的函数必须在这里面实现，实际上是去瓶装我们的service
-		MutateHeadLessSvc(&etcdCluster, &svc)
-		return controllerutil.SetControllerReference(&etcdCluster, &svc, r.Scheme)
-	})
-	if err != nil {
+	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		op, err := ctrl.CreateOrUpdate(ctx, r.Client, &svc, func() error {
+			// 调谐的函数必须在这里面实现，实际上是去瓶装我们的service
+			MutateHeadLessSvc(&etcdCluster, &svc)
+			return controllerutil.SetControllerReference(&etcdCluster, &svc, r.Scheme)
+		})
+		logger.Info("CreateOrUpdate ", "Service", op)
+		return err
+	}); err != nil {
 		return ctrl.Result{}, err
 	}
-	logger.Info("CreateOrUpdate", "Service", op)
 
 	var sts appsV1.StatefulSet
 	sts.Name = etcdCluster.Name
 	sts.Namespace = etcdCluster.Namespace
 
-	op, err = ctrl.CreateOrUpdate(ctx, r.Client, &sts, func() error {
-		// 调谐的函数必须在这里面实现，实际上是去瓶装我们的service
-		MutateStatefulSet(&etcdCluster, &sts)
-		return controllerutil.SetControllerReference(&etcdCluster, &sts, r.Scheme)
-	})
-	if err != nil {
+	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		op, err := ctrl.CreateOrUpdate(ctx, r.Client, &sts, func() error {
+			// 调谐的函数必须在这里面实现，实际上是去瓶装我们的service
+			MutateStatefulSet(&etcdCluster, &sts)
+			return controllerutil.SetControllerReference(&etcdCluster, &sts, r.Scheme)
+		})
+		logger.Info("CreateOrUpdate ", "StatefulSet", op)
+		return err
+	}); err != nil {
 		return ctrl.Result{}, err
 	}
-	logger.Info("CreateOrUpdate ", "StatefulSet", op)
 
 	return ctrl.Result{}, nil
 }
@@ -93,5 +99,6 @@ func (r *EtcdClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 func (r *EtcdClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&etcdv1alpha1.EtcdCluster{}).
+		Owns(&appsV1.StatefulSet{}).Owns(&coreV1.Service{}).
 		Complete(r)
 }
