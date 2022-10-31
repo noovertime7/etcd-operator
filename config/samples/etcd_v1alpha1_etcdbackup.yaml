@@ -1,0 +1,6 @@
+apiVersion: etcd.yunxue521.top/v1alpha1
+kind: EtcdBackup
+metadata:
+  name: etcdbackup-sample
+spec:
+  # TODO(user): Add fields here
