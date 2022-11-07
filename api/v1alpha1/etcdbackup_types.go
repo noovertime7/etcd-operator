@@ -37,7 +37,7 @@ type EtcdBackupSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	Image        string            `json:"image"`
-	Endpoints    []string          `json:"endpoints"`
+	EtcdUrl      string            `json:"etcdUrl"`
 	StorageType  BackupStorageType `json:"storageType"`
 	BackupSource `json:",inline"`
 }
@@ -59,9 +59,14 @@ type OSSBackupSource struct {
 
 // EtcdBackupStatus defines the observed state of EtcdBackup
 type EtcdBackupStatus struct {
-	Phase          EtcdBackupPhase `json:"phase,omitempty"`
-	StartTime      *metav1.Time    `json:"startTime"`
-	CompletionTime *metav1.Time    `json:"completionTime"`
+	// Phase defines the current operation that the backup process is taking.
+	Phase EtcdBackupPhase `json:"phase,omitempty"`
+	// StartTime is the times that this backup entered the `BackingUp' phase.
+	// +optional
+	StartTime *metav1.Time `json:"startTime,omitempty"`
+	// CompletionTime is the time that this backup entered the `Completed' phase.
+	// +optional
+	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
 }
 
 //+kubebuilder:object:root=true
