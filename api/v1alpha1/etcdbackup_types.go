@@ -24,10 +24,14 @@ type BackupStorageType string
 type EtcdBackupPhase string
 
 var (
-	EtcdBackupPhaseBackingUp EtcdBackupPhase = "BackingUp"
-	EtcdBackupPhaseCompleted EtcdBackupPhase = "Completed"
-	EtcdBackupPhaseFailed    EtcdBackupPhase = "Failed"
+	EtcdBackupPhaseBackingUp EtcdBackupPhase   = "BackingUp"
+	EtcdBackupPhaseCompleted EtcdBackupPhase   = "Completed"
+	EtcdBackupPhaseFailed    EtcdBackupPhase   = "Failed"
+	EtcdBackupStorageTypeS3  BackupStorageType = "s3"
+	EtcdBackupStorageTypeOss BackupStorageType = "oss"
 )
+
+type EtcdBackupStorageType string
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
@@ -48,13 +52,15 @@ type BackupSource struct {
 }
 
 type S3BackupSource struct {
+	EndPoint string `json:"endpoint"`
 	Path     string `json:"path"`
-	S3Secret string `json:"s3Secret"`
+	Secret   string `json:"secret"`
 }
 
 type OSSBackupSource struct {
-	Path      string `json:"path"`
-	OssSecret string `json:"ossSecret"`
+	EndPoint string `json:"endpoint"`
+	Path     string `json:"path"`
+	Secret   string `json:"secret"`
 }
 
 // EtcdBackupStatus defines the observed state of EtcdBackup

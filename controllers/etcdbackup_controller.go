@@ -95,7 +95,7 @@ func (r *EtcdBackupReconciler) setStateDesired(state *backupState) error {
 	var desired backupStateContainer
 
 	// 创建一个管理的 Pod 用于执行备份操作
-	pod, err := podForBackup(state.backup, "chenteng/etcd-operator-backup:1.0.0")
+	pod, err := podForBackup(state.backup)
 	if err != nil {
 		return fmt.Errorf("computing pod for backup error: %q", err)
 	}
@@ -138,7 +138,34 @@ func (r EtcdBackupReconciler) getState(ctx context.Context, req ctrl.Request) (*
 }
 
 // podForBackup 创建一个 Pod 运行备份任务
-func podForBackup(backup *etcdv1alpha1.EtcdBackup, image string) (*corev1.Pod, error) {
+func podForBackup(backup *etcdv1alpha1.EtcdBackup) (*corev1.Pod, error) {
+	var secretRef *corev1.SecretEnvSource
+	var endpoint, backupUrl string
+	switch {
+	case backup.Spec.StorageType == etcdv1alpha1.EtcdBackupStorageTypeS3:
+		endpoint = backup.Spec.S3.EndPoint
+		backupUrl = fmt.Sprintf("%s://%s", backup.Spec.StorageType, backup.Spec.S3.Path)
+		secretRef = &corev1.SecretEnvSource{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: backup.Spec.S3.Secret,
+			},
+		}
+	case backup.Spec.StorageType == etcdv1alpha1.EtcdBackupStorageTypeOss:
+		endpoint = backup.Spec.OSS.EndPoint
+		backupUrl = fmt.Sprintf("%s://%s", backup.Spec.StorageType, backup.Spec.OSS.Path)
+		secretRef = &corev1.SecretEnvSource{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: backup.Spec.OSS.Secret,
+			},
+		}
+	default:
+		secretRef = &corev1.SecretEnvSource{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: backup.Spec.OSS.Secret,
+			},
+		}
+	}
+
 	// 构造一个全新的备份 Pod
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -149,7 +176,20 @@ func podForBackup(backup *etcdv1alpha1.EtcdBackup, image string) (*corev1.Pod, e
 			Containers: []corev1.Container{
 				{
 					Name:  "backup-agent",
-					Image: image, // todo，执行备份的镜像
+					Image: backup.Spec.Image, // todo，执行备份的镜像
+					Args: []string{
+						"--etcd-url", backup.Spec.EtcdUrl,
+						"--backup-url", backupUrl,
+					},
+					Env: []corev1.EnvVar{{
+						Name:  "ENDPOINT",
+						Value: endpoint,
+					}},
+					EnvFrom: []corev1.EnvFromSource{
+						{
+							SecretRef: secretRef,
+						},
+					},
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU:    resource.MustParse("100m"),
