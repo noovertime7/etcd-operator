@@ -19,14 +19,17 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"html/template"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"strings"
 	"time"
 
 	etcdv1alpha1 "github.com/noovertime7/etcd-operator/api/v1alpha1"
@@ -34,8 +37,9 @@ import (
 
 // EtcdBackupReconciler reconciles a EtcdBackup object
 type EtcdBackupReconciler struct {
-	BackupImage string
+	Recorder record.EventRecorder
 	client.Client
+
 	Scheme *runtime.Scheme
 }
 
@@ -144,7 +148,19 @@ func podForBackup(backup *etcdv1alpha1.EtcdBackup) (*corev1.Pod, error) {
 	switch {
 	case backup.Spec.StorageType == etcdv1alpha1.EtcdBackupStorageTypeS3:
 		endpoint = backup.Spec.S3.EndPoint
-		backupUrl = fmt.Sprintf("%s://%s", backup.Spec.StorageType, backup.Spec.S3.Path)
+		//模板化path
+		tmpl, err := template.New("template").Parse(backup.Spec.S3.Path)
+		if err != nil {
+			return nil, err
+		}
+		// 解析成备份的地址
+		var objectURL strings.Builder
+		err = tmpl.Execute(&objectURL, backup)
+		if err != nil {
+			return nil, err
+		}
+		fmt.Println("objectURL = ", objectURL.String())
+		backupUrl = fmt.Sprintf("%s://%s", backup.Spec.StorageType, objectURL.String())
 		secretRef = &corev1.SecretEnvSource{
 			LocalObjectReference: corev1.LocalObjectReference{
 				Name: backup.Spec.S3.Secret,
@@ -161,7 +177,7 @@ func podForBackup(backup *etcdv1alpha1.EtcdBackup) (*corev1.Pod, error) {
 	default:
 		secretRef = &corev1.SecretEnvSource{
 			LocalObjectReference: corev1.LocalObjectReference{
-				Name: backup.Spec.OSS.Secret,
+				Name: backup.Spec.S3.Secret,
 			},
 		}
 	}
@@ -237,6 +253,7 @@ func (r *EtcdBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	case state.actual.pod == nil: // 当前还没有备份的 Pod
 		logger.Info("Backup Pod does not exists. Creating.")
 		action = &CreateObject{client: r.Client, obj: state.desired.pod} // 下一步要执行的动作
+		r.Recorder.Event(state.backup, corev1.EventTypeNormal, EventReasonSuccessfulCreate, "Success for create backup pod")
 
 	case state.actual.pod.Status.Phase == corev1.PodFailed: // 备份Pod执行失败
 		logger.Info("Backup Pod failed. Updating status.")
@@ -244,11 +261,15 @@ func (r *EtcdBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		newBackup.Status.Phase = etcdv1alpha1.EtcdBackupPhaseFailed
 		action = &PatchStatus{client: r.Client, original: state.backup, new: newBackup} // 下一步更新状态为失败
 
+		r.Recorder.Event(state.backup, corev1.EventTypeWarning, EventReasonBackupFailed, "Backup failed,See backup pod for detail information")
+
 	case state.actual.pod.Status.Phase == corev1.PodSucceeded: // 备份Pod执行完成
 		logger.Info("Backup Pod succeeded. Updating status.")
 		newBackup := state.backup.DeepCopy()
 		newBackup.Status.Phase = etcdv1alpha1.EtcdBackupPhaseCompleted
 		action = &PatchStatus{client: r.Client, original: state.backup, new: newBackup} // 下一步更新状态为完成
+
+		r.Recorder.Event(state.backup, corev1.EventTypeNormal, EventReasonBackupSuccess, "Backup completed successfully")
 	}
 
 	// 执行动作

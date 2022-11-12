@@ -42,7 +42,6 @@ func main() {
 	endPoint := os.Getenv("ENDPOINT")
 	accessKey := os.Getenv("MINIO_ACCESS_KEY")
 	accessSecret := os.Getenv("MINIO_SECRET_KEY")
-
 	ctx := context.Background()
 	//定义logger
 	flag.Parse()

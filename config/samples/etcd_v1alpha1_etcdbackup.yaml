@@ -3,13 +3,13 @@ kind: EtcdBackup
 metadata:
   name: etcdbackup-sample
 spec:
-  image: "chenteng/etcd-operator-backup:2.0.2"
+  image: "chenteng/etcd-operator-backup:2.0.4"
   etcdUrl: "http://etcdcluster-sample-0.etcdcluster-sample.default.svc.cluster.local:2379"
   storageType: "s3"
   s3:
-    path: "mysqlbak/test.db"  
-    endpoint: "192.168.1.189:9000"
-    secret: "minio-access-secret"
+    path: "mysqlbak/{{ .Namespace }}/{{ .Name }}/{{ .UID }}/etcd.db"
+    endpoint: "192.168.1.191:9000"
+    secret: "minio-new-access-secret"
   oss:
     path: ""
     endpoint: "192.168.1.189:9000"
